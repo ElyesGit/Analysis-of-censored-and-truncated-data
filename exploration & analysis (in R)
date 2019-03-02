@@ -1,0 +1,178 @@
+
+library(survival)
+library(KMsurv)
+setwd("adress of poumonExacerbation.txt")
+donnees = read.table("poumonExacerbation.txt", header=TRUE)
+
+#######___Question_1____###############
+#######___Normalite_&_homoscedasdicite__###############
+
+data.traitment <- subset(donnees, donnees$treatment==1) 
+data.placebo <- subset(donnees, donnees$treatment==0) 
+
+modTraitement <- lm(temps ~ vef, data = data.traitment)
+modPlacebo <- lm(temps ~ vef, data = data.placebo)
+
+par(mfrow=c(2,4))
+plot(modTraitement)
+plot(modPlacebo)
+
+#######___Moyenne_&_ecart_type__###############
+modTotal <- lm(temps ~ vef, data =donnees)
+n<-length(donnees$temps)
+ecarttype<-sd(donnees$vef)
+moyenne_vef=mean(donnees$vef)
+
+#######___Question_2____###############
+#Kolmogorov#
+ks.test(data.traitment$vef, data.placebo$vef, alternative="two.sided")
+###_Voir_https://stat.ethz.ch/R-manual/R-devel/library/stats/html/ks.test.html###
+
+#######___Question_3____###############
+#Estimation Kaplan Meier de la fonction de survie#
+Kapfit <- survfit(Surv(time=temps, event=evenement) ~ 1 , type="kaplan-meier", data = donnees)
+#Estimation de B par Breslow#
+coxfit<- coxph(Surv(time=temps, event=evenement) ~ treatment, method="breslow", data = donnees)
+summary(coxfit)
+plot(Kapfit$surv)
+
+
+#On a donc B_traitement= -0.3357 , et on a S_estim(t|z1)= (S(t)_Kaplan M.)^exp(z1*B_traitement)#
+B_traitement= -0.3357
+Survival_function_treatment= (Kapfit$surv)^exp(1*B_traitement)
+Survival_function_placebo= Kapfit$surv #Ici puisque z1=0 alors le terme exp est =1#
+
+par(mfrow=c(2,2))
+plot(Survival_function_treatment)
+plot(Survival_function_placebo)
+
+
+#Les tests tires de summary(coxfit) sur H0:B=0 sont tous significatifs au niveau 99%#
+#On rejette H0 et il y a donc evidence que B est different de 0, d ou r_0,1 le rapport#
+#de risque est different de 1, c.a.d qu il y a une difference entre les taux de risque#
+
+#######___Question_4____###############
+max<-max(donnees$vef)
+min<-min(donnees$vef)
+largeur<-(max-min)/3
+donnees$vefB<-(donnees$vef<=largeur+min)*donnees$vef
+donnees$vefM<-(largeur+min<donnees$vef & donnees$vef<=2*largeur+min)*donnees$vef
+donnees$vefE<-(2*largeur+min<donnees$vef)*donnees$vef
+donnees$Zvef<-(donnees$vefB!=0)*2 + (donnees$vefM!=0)*1 #Si vef grand risque est petit#
+
+coxfit2<-coxph(Surv(time=temps, event=evenement) ~ factor(Zvef), method="breslow", data = donnees)
+summary(coxfit2)
+B_moyen<-1.1191
+B_bas<-1.7653
+
+#On a donc B_estim_ 2 et 3 correspondants aux ZvefB,M,E#
+
+groupE= seq( 1, length(donnees$Zvef) )[ donnees$Zvef == "0" ]
+B_M= donnees[ - groupE, ]
+bmt.surv= survdiff(Surv(B_M$temps, B_M$evenement)~ B_M$Zvef,
+data=B_M)
+bmt.surv
+
+groupM= seq( 1, length(donnees$Zvef) )[ donnees$Zvef == "1" ]
+B_E= donnees[ - groupM, ]
+bmt.surv= survdiff(Surv(B_E$temps, B_E$evenement)~ B_E$Zvef,
+data=B_E)
+bmt.surv
+
+groupB= seq( 1, length(donnees$Zvef) )[ donnees$Zvef == "2" ]
+M_E= donnees[ - groupB, ]
+bmt.surv= survdiff(Surv(M_E$temps, M_E$evenement)~ M_E$Zvef,
+data=M_E)
+bmt.surv
+
+#On a donc les statistiques Chi-2 des test simultanees, ne pas oublier correction BONFERRONI!!!!# 
+
+#Les 6 estimateurs des courbes de survie de S(t|Z) avec Z=(Z_traitement,Zvef)#
+Surv_trait_vefB<- (Kapfit$surv)^exp(B_traitement + 2*B_bas)
+Surv_trait_vefM<- (Kapfit$surv)^exp(B_traitement + B_moyen)
+Surv_trait_vefE<- (Kapfit$surv)^exp(B_traitement)
+Surv_placb_vefB<- (Kapfit$surv)^exp(2*B_bas)
+Surv_placb_vefM<- (Kapfit$surv)^exp(B_moyen)
+Surv_placb_vefE<- Kapfit$surv
+
+par(mfrow=c(2,3))
+plot(Surv_trait_vefB)
+plot(Surv_trait_vefM)
+plot(Surv_trait_vefE)
+plot(Surv_placb_vefB)
+plot(Surv_placb_vefM)
+plot(Surv_placb_vefE)
+#Commenter ces graphes#
+
+#######___Question_5____###############
+don<-donnees[order(donnees$temps),]
+Kapfit2 <- survfit(Surv(time=temps, event=evenement) ~ Zvef , type="kaplan-meier", data = don)
+don$surv<-Kapfit2$surv
+attach(don)
+don$Y_i<-c(rep(1:644))
+namees(don$Y_i)<-Y_i
+Y_i=644
+don[1,10]<-644	
+for (i in 2:length(don$vef)){
+	Y_i=Y_i -1*(don[i,4]==1)
+	don[i,10]<-Y_i
+}
+don$sum_di_over_YiYi_diYi<-c(rep(1:645))
+names(sum_di_over_YiYi_diYi)<-sum_di_over_YiYi_diYi
+sum_di_over_YiYi_diYi=0
+for (i in 1:length(don$vef)){
+	di_over_YiYi_diYi=don[i,4]/((don[i,10]-don[i,4])*don[i,10])
+	sum_di_over_YiYi_diYi=di_over_YiYi_diYi+sum_di_over_YiYi_diYi
+	don[i,11]<-sum_di_over_YiYi_diYi
+}
+
+#Vu que je n ai pas pu trouver une procedure pour calculer Q1+Q2 sur R#
+#j ai calculee l ecart type "s" a partir des donnees S(t|Z)#
+IC_traitBas<-c(0.3-1.96*sd(Surv_trait_vefB),0.3+1.96*sd(Surv_trait_vefB))
+IC_traitMoy<-c(0.3-1.96*sd(Surv_trait_vefM),0.3+1.96*sd(Surv_trait_vefM))
+IC_traitElv<-c(0.3-1.96*sd(Surv_trait_vefE),0.3+1.96*sd(Surv_trait_vefE))
+IC_placebBas<-c(0.3-1.96*sd(Surv_placb_vefB),0.3+1.96*sd(Surv_placb_vefB))
+IC_placebMoy<-c(0.3-1.96*sd(Surv_placb_vefM),0.3+1.96*sd(Surv_placb_vefM))
+IC_placebElv<-c(0.3-1.96*sd(Surv_placb_vefE),0.3+1.96*sd(Surv_placb_vefE))
+IC_30<-data.frame(IC_traitBas,IC_traitMoy,IC_traitElv,IC_placebBas,IC_placebBas,IC_placebElv)
+IC_10<-IC_30 -0.2
+
+#Les deux IC ont la meme largeur puisquon travaille avec le mm ecart type#
+#si on avait pu utiliser la formule avec les Q1 Q2 on aurait pu evaluer la#
+#variance au quantile 30% qui sera differente a celle du quantile 10% et on#
+#aurait eu des largeurs differentes pour les IC#
+#VOIR BROUILLON EX5!!!!!!!!!!!!!!!!!!!#
+
+survreg(Surv(time=temps, event=evenement) ~ treatment + Zvef, dist="weibull")
+
+
+#######___Question_6____###############
+data.traitement <- subset(donnees, donnees$treatment==1) 
+data.placebo <- subset(donnees, donnees$treatment==0) 
+
+
+coxfit3<-coxph(Surv(time=temps, event=evenement) ~ treatment + Zvef, method="breslow", data = data.traitement)
+H1<-basehaz(coxfit3)
+t1<-H1$time
+logH1<-log(H1$hazard)
+coxfit4<-coxph(Surv(time=temps, event=evenement) ~ treatment + Zvef, method="breslow", data = data.placebo)
+H2<-basehaz(coxfit4)
+logH2<-log(H2$hazard)
+t2<-H2$time
+
+plot(logH1~t1)
+lines(logH2~t2)
+
+#######___Question_7____###############
+library(car)
+donnees<-donnees[order(donnees$temps),]
+kapfit5<-survfit(Surv(time=temps, event=evenement) ~ treatment + Zvef, data = donnees)
+donnees$txrisque<-kapfit5$surv
+attach(donnees)
+dataexact<- subset(donnees, donnees$evenement==1) 
+aov1 <- aov(temps~Zvef*treatment,data=dataexact)
+anova(aov1)
+
+
+
+
